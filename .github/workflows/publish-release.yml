@@ -1,0 +1,52 @@
+name: Publish Latest APK Release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'FashaKeyboard-release.apk'
+      - 'version.json'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: Publish APK to Latest Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout mirror
+        uses: actions/checkout@v4
+
+      - name: Publish APK & version.json to latest release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ ! -f FashaKeyboard-release.apk ] || [ ! -f version.json ]; then
+            echo "APK or version.json missing; skipping."
+            exit 0
+          fi
+          SHA="$(jq -r '.sha // "latest"' version.json)"
+          BUILT_AT="$(jq -r '.built_at // ""' version.json)"
+          SHA256="$(jq -r '.sha256 // ""' version.json)"
+          TAG="latest"
+          NOTES=$(cat <<EOF
+          Latest **Fasha Keyboard** Signed Release APK (commit \`${SHA}\`).
+          Built at: ${BUILT_AT}
+          SHA-256: \`${SHA256}\`
+
+          Tap **FashaKeyboard-release.apk** below on your Android phone to download and install.
+          EOF
+          )
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" FashaKeyboard-release.apk version.json --clobber
+            gh release edit "$TAG" --notes "$NOTES"
+          else
+            gh release create "$TAG" FashaKeyboard-release.apk version.json \
+              --target "$GITHUB_SHA" \
+              --title "Latest APK Build" \
+              --notes "$NOTES"
+          fi
